@@ -1,20 +1,10 @@
 require "csv"
 require "google/apis/civicinfo_v2"
 require "erb"
+require "time"
 
 def clean_zipcode(zipcode)
   zipcode.to_s.rjust(5, "0")[0..4]
-end
-
-def clean_phone_numbers(phone)
-  phone.gsub!(/[^0-9]/, "")
-  if phone.length == 11 && phone.to_s[0] == "1"
-    phone = phone[1..-1]
-  elsif phone.nil? || phone.length < 10 || phone.length >= 11
-    "Bad number"
-  else
-    phone
-  end
 end
 
 def legislators_by_zipcode(zip)
@@ -42,6 +32,32 @@ def save_thank_you_letter(id, form_letter)
   end
 end
 
+def clean_phone_numbers(phone)
+  phone.gsub!(/[^0-9]/, "")
+  if phone.length == 11 && phone.to_s[0] == "1"
+    phone = phone[1..-1]
+  elsif phone.nil? || phone.length < 10 || phone.length >= 11
+    "Bad number"
+  else
+    phone
+  end
+end
+
+def time_targeting(counter, format)
+  string_tabulation = String.new
+  counter = counter.sort_by { |key, value| value }.reverse
+  counter.each do |key, count|
+    if format == "hour"
+      string_tabulation += "#{key.rjust(2, "0")}: #{count}
+"
+    elsif format == "day"
+      string_tabulation += "#{key.ljust(10)}: #{count}
+"
+    end
+  end
+  string_tabulation
+end
+
 puts "EventManager initialized."
 
 contents = CSV.open(
@@ -52,6 +68,8 @@ contents = CSV.open(
 
 template_letter = File.read("form_letter.erb")
 erb_template = ERB.new template_letter
+hour_counter = Hash.new(0)
+day_counter = Hash.new(0)
 
 contents.each do |row|
   id = row[0]
@@ -64,4 +82,14 @@ contents.each do |row|
   save_thank_you_letter(id, form_letter)
 
   phone = clean_phone_numbers(row[:homephone])
+
+  registration_date = Time.strptime(row[:regdate], "%m/%d/%y %k:%M")
+  registration_hour = registration_date.hour
+  hour_counter["#{registration_hour}"] += 1
+
+  registration_day = registration_date.strftime("%A")
+  day_counter["#{registration_day}"] += 1
 end
+
+hour_count = time_targeting(hour_counter, "hour")
+day_count = time_targeting(day_counter, "day")
